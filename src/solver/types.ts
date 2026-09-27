@@ -9,6 +9,12 @@ export interface RailPosition {
 export interface BlockOptionInput {
   railId: string;
   cost: number;
+  /**
+   * 录入代价的十进制原文（可选）。代价的精确比较以原文为准：
+   * 两个不同的录入值可能舍入为同一个双精度 number（如 "0.10000000000000001"
+   * 与 "0.1"），此时只能凭原文区分；缺省时退回由 cost 的最短往返表示恢复。
+   */
+  costText?: string;
 }
 
 /** 一块幕布配重。 */

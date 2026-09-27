@@ -3,6 +3,7 @@ import {
   decimalAdd,
   decimalCompare,
   decimalFromNumber,
+  decimalFromText,
   decimalToNumber,
   type Decimal,
 } from './decimal';
@@ -29,7 +30,7 @@ interface FlatOption {
   railName: string;
   coordinate: number;
   cost: number;
-  /** 本选项代价的精确十进制值（由录入值的最短往返表示恢复）。 */
+  /** 本选项代价的精确十进制值（优先由录入原文恢复，见 costDecimalOf）。 */
   costDecimal: Decimal;
 }
 
@@ -38,6 +39,22 @@ interface FlatBlock {
   name: string;
   mass: number;
   options: FlatOption[];
+}
+
+/**
+ * 取一个选项代价的精确十进制值：优先用录入原文（避免双精度舍入丢失
+ * "0.10000000000000001" vs "0.1" 这类差异）；原文形态无法按十进制解析
+ * （Number() 还接受 0x10 这类写法）时退回 number 的最短往返表示。
+ */
+function costDecimalOf(o: { cost: number; costText?: string }): Decimal {
+  if (o.costText !== undefined) {
+    try {
+      return decimalFromText(o.costText);
+    } catch {
+      // 落到下方按 number 恢复
+    }
+  }
+  return decimalFromNumber(o.cost);
 }
 
 /**
@@ -106,7 +123,7 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
         railName: rail.name,
         coordinate: rail.coordinate,
         cost: o.cost,
-        costDecimal: decimalFromNumber(o.cost),
+        costDecimal: costDecimalOf(o),
       };
     }),
   }));

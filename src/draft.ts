@@ -81,6 +81,9 @@ export function parseDraft(d: Draft): ParseResult {
       options: b.options.map((o) => ({
         railId: o.railId,
         cost: num(o.cost, `配重「${b.name}」的安装代价`),
+        // 保留录入原文：代价的精确十进制比较以此为准，避免 Number() 舍入
+        // 把两个不同的录入值（如 0.10000000000000001 与 0.1）抹成同一个数。
+        costText: o.cost.trim(),
       })),
     })),
     limits: {

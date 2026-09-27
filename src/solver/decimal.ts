@@ -14,23 +14,49 @@ export interface Decimal {
 
 export const DECIMAL_ZERO: Decimal = { coefficient: 0n, exponent: 0 };
 
-/** number 的最短往返十进制文本（String(x) 的输出格式）。 */
-const DECIMAL_TEXT = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/;
+/** 十进制文本：可选符号、整数/小数部分（允许 .5 或 5.）、可选十进制指数。 */
+const DECIMAL_TEXT = /^([+-]?)(?:(\d+)(?:\.(\d*))?|\.(\d+))(?:[eE]([+-]?\d+))?$/;
+
+/** 把一段十进制文本解析为（符号, 数字串, 小数位数, 指数值）；无法解析返回 null。 */
+function parseDecimalText(text: string): [sign: 1n | -1n, digits: string, fracLength: number, exp: number] | null {
+  const m = DECIMAL_TEXT.exec(text.trim());
+  if (!m) return null;
+  const signText = m[1];
+  // 整数部分存在（含 "5." 这种）时小数取第 3 组，否则是 ".5" 形式取第 4 组。
+  const fracPart = m[2] !== undefined ? m[3] ?? '' : m[4] ?? '';
+  const digits = (m[2] ?? '') + fracPart; // BigInt 可直接处理前导 0
+  const exponent = (m[5] === undefined ? 0 : Number(m[5])) - fracPart.length;
+  return [signText === '-' ? -1n : 1n, digits, fracPart.length, exponent];
+}
 
 /**
- * 以 number 的最短往返表示恢复其十进制值。录入文本经 Number() 解析后，
- * String() 会给出能往返同一双精度的最短十进制串，即录入的十进制值本身
- * （如 0.1 → "0.1"，1e-10 → "1e-10"）。
+ * 直接按录入的十进制文本恢复精确值，不经过双精度浮点。
+ *
+ * 这是代价精确性的关键入口：两个不同的录入值可能在 Number() 舍入后变成
+ * 同一个双精度数（如 "0.10000000000000001" 与 "0.1" 都会舍入为 0.1），
+ * 一旦先经过 Number()，差异就不可逆地丢失，decimalFromNumber 也无法恢复。
+ * 因此凡能拿到录入原文时都应走本函数。
+ */
+export function decimalFromText(text: string): Decimal {
+  const parsed = parseDecimalText(text);
+  if (!parsed) throw new Error(`无法解析的十进制数值: ${text}`);
+  const [sign, digits, , exponent] = parsed;
+  const coefficient = BigInt(digits);
+  return normalize({ coefficient: sign * coefficient, exponent });
+}
+
+/**
+ * 以 number 的最短往返表示恢复其十进制值。适用于只有 number 而无录入原文
+ * （如编程式构造的场景）。String(number) 会给出能往返同一双精度的最短
+ * 十进制串（如 0.1 → "0.1"，1e-10 → "1e-10"），但无法恢复已被双精度
+ * 舍入抹掉的差异——那种情况必须使用 decimalFromText。
  */
 export function decimalFromNumber(x: number): Decimal {
   if (!Number.isFinite(x)) throw new Error(`十进制代价须为有限数值: ${x}`);
-  const m = DECIMAL_TEXT.exec(String(x));
-  if (!m) throw new Error(`无法解析的十进制数值: ${String(x)}`);
-  const [, sign, intPart, fracPart = '', expPart] = m;
-  let coefficient = BigInt(intPart + fracPart);
-  if (sign === '-') coefficient = -coefficient;
-  const exponent = (expPart === undefined ? 0 : Number(expPart)) - fracPart.length;
-  return normalize({ coefficient, exponent });
+  const parsed = parseDecimalText(String(x));
+  if (!parsed) throw new Error(`无法解析的十进制数值: ${String(x)}`);
+  const [sign, digits, , exponent] = parsed;
+  return normalize({ coefficient: sign * BigInt(digits), exponent });
 }
 
 /** 去掉系数末尾的 0（并把零规范化为 0 × 10^0），保持表示紧凑。 */

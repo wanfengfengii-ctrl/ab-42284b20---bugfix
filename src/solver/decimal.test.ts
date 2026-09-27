@@ -4,11 +4,13 @@ import {
   decimalAdd,
   decimalCompare,
   decimalFromNumber,
+  decimalFromText,
   decimalToNumber,
   decimalToString,
 } from './decimal';
 
 const d = decimalFromNumber;
+const t = decimalFromText;
 
 describe('decimal · 精确十进制表示', () => {
   it('由录入值恢复十进制：0.1、1e-10、整数与科学计数法', () => {
@@ -59,5 +61,37 @@ describe('decimal · 精确十进制表示', () => {
     expect(decimalToNumber(decimalAdd(d(0.1), d(0.2)))).toBe(0.3);
     expect(decimalToNumber(d(0))).toBe(0);
     expect(decimalToString(decimalAdd(d(0.1), d(0.2)))).toBe('0.3');
+  });
+});
+
+describe('decimal · 录入原文精确解析（decimalFromText）', () => {
+  it('保留超出双精度精度的录入差异：0.10000000000000001 严格大于 0.1', () => {
+    // 双精度下两者舍入为同一个数，差异只能凭录入原文保留
+    expect(Number('0.10000000000000001')).toBe(0.1);
+    expect(decimalCompare(t('0.10000000000000001'), t('0.1'))).toBe(1);
+    expect(decimalCompare(t('0.1'), t('0.10000000000000001'))).toBe(-1);
+    expect(decimalToString(t('0.10000000000000001'))).toBe('0.10000000000000001');
+    // 转回双精度会再次舍入为 0.1，但精确比较已在 Decimal 层完成
+    expect(decimalToNumber(t('0.10000000000000001'))).toBe(0.1);
+  });
+
+  it('与 decimalFromNumber 对常规录入一致，并支持 .5 / 5. / 指数 / 前导零 / 空白', () => {
+    expect(decimalCompare(t('0.1'), d(0.1))).toBe(0);
+    expect(decimalCompare(t('0.3000000001'), d(0.3000000001))).toBe(0);
+    expect(decimalToString(t('.5'))).toBe('0.5');
+    expect(decimalToString(t('5.'))).toBe('5');
+    expect(decimalToString(t('1e3'))).toBe('1000');
+    expect(decimalToString(t('+2E-2'))).toBe('0.02');
+    expect(decimalToString(t('000.10'))).toBe('0.1');
+    expect(decimalToString(t('  0.25  '))).toBe('0.25');
+    expect(decimalToString(t('-0.5'))).toBe('-0.5');
+    expect(decimalCompare(t('0'), DECIMAL_ZERO)).toBe(0);
+  });
+
+  it('非法文本抛出错误', () => {
+    expect(() => t('')).toThrow();
+    expect(() => t('abc')).toThrow();
+    expect(() => t('1.2.3')).toThrow();
+    expect(() => t('e5')).toThrow();
   });
 });

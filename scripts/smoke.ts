@@ -139,6 +139,68 @@ if (r4.feasible) {
   );
 }
 
+// 超双精度精度的极细小十进制差额：b1 位置 #1 录入 0.10000000000000001、位置 #2
+// 录入 0.1，其余三块两个位置代价均为 0。两者经 Number() 舍入为同一个双精度数
+// （Number('0.10000000000000001') === 0.1），必须凭录入原文严格区分：b1 选 #2，
+// 返回位置序号 1,0,0,0；真同代价时序号决胜才取 0,0,0,0。
+const ultraFineScenario: Scenario = {
+  rails: [
+    { id: 'Z1', name: 'Z1', coordinate: 0 },
+    { id: 'Z2', name: 'Z2', coordinate: 0 },
+  ],
+  blocks: [
+    {
+      id: 'b1',
+      name: 'b1',
+      mass: 1,
+      options: [
+        { railId: 'Z1', cost: 0.10000000000000001, costText: '0.10000000000000001' },
+        { railId: 'Z2', cost: 0.1, costText: '0.1' },
+      ],
+    },
+    { id: 'b2', name: 'b2', mass: 1, options: [{ railId: 'Z1', cost: 0 }, { railId: 'Z2', cost: 0 }] },
+    { id: 'b3', name: 'b3', mass: 1, options: [{ railId: 'Z1', cost: 0 }, { railId: 'Z2', cost: 0 }] },
+    { id: 'b4', name: 'b4', mass: 1, options: [{ railId: 'Z1', cost: 0 }, { railId: 'Z2', cost: 0 }] },
+  ],
+  limits: { maxLoad: 4, minTorque: -1, maxTorque: 1 },
+};
+
+const r5 = adjudicate(ultraFineScenario);
+check(r5.feasible, '裁决模块：极细小十进制差额场景应判定为可行');
+if (r5.feasible) {
+  const p = r5.plan;
+  check(p.steps.length === 4, '极细小差额：完整方案应覆盖四块配重');
+  check(
+    p.steps.map((s) => s.optionIndex).join(',') === '1,0,0,0',
+    `极细小差额：b1 须选代价 0.1 的位置 #2，返回 1,0,0,0（实际 ${p.steps.map((s) => s.optionIndex).join(',')}）`,
+  );
+  check(p.steps[0].railId === 'Z2', '极细小差额：首块 b1 应挂在 Z2');
+  check(p.totalCost === 0.1, `极细小差额：总代价应为 0.1（实际 ${p.totalCost}）`);
+  check(p.finalMass === 4, '极细小差额：最终载荷应恰为上限 4（载荷边界）');
+  check(
+    p.steps.every((s) => s.cumulativeTorque === 0 && s.cumulativeMass <= 4),
+    '极细小差额：每个前缀满足载荷与力矩限制（零力臂力矩恒为 0，落在 [-1,1]）',
+  );
+}
+
+// 极细小差额的并列对照：b1 两个位置都录入 0.1（真正相等），序号决胜应取 #1。
+const ultraFineTieScenario: Scenario = {
+  ...ultraFineScenario,
+  blocks: ultraFineScenario.blocks.map((b) =>
+    b.id === 'b1'
+      ? { ...b, options: [{ railId: 'Z1', cost: 0.1, costText: '0.1' }, { railId: 'Z2', cost: 0.1, costText: '0.1' }] }
+      : b,
+  ),
+};
+const r6 = adjudicate(ultraFineTieScenario);
+check(r6.feasible, '裁决模块：极细小差额的并列对照场景应判定为可行');
+if (r6.feasible) {
+  check(
+    r6.plan.steps.map((s) => s.optionIndex).join(',') === '0,0,0,0',
+    `极细小差额并列：真同代价应按序号决胜返回 0,0,0,0（实际 ${r6.plan.steps.map((s) => s.optionIndex).join(',')}）`,
+  );
+}
+
 // 不可行场景：深度 1 即止步，最深前缀为 b1@R（余量最大），剩余选择同时触发载荷与力矩限制。
 const infeasibleScenario: Scenario = {
   rails: [{ id: 'R', name: 'R', coordinate: 1 }],
