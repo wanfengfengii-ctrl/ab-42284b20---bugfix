@@ -3,11 +3,13 @@ import {
   decimalAdd,
   decimalCompare,
   decimalFromNumber,
+  decimalFromString,
   decimalToNumber,
   type Decimal,
 } from './decimal';
 import type {
   AdjudicationOutcome,
+  BlockOptionInput,
   Limits,
   Plan,
   Scenario,
@@ -51,6 +53,23 @@ interface Candidate {
 
 function torqueMarginOf(torque: number, limits: Limits): number {
   return Math.min(torque - limits.minTorque, limits.maxTorque - torque);
+}
+
+/**
+ * 选项代价的精确十进制值：优先按录入原文解析（保留 Number() 会舍去的末尾
+ * 有效位，如 "0.10000000000000001" 严格大于 "0.1"）；录入原文缺失或不是
+ * 规范十进制文本（如 "0x10" 这类 Number() 可解析的录入）时，回退到由
+ * 数值的最短往返表示恢复。
+ */
+function optionCostDecimal(o: BlockOptionInput): Decimal {
+  if (o.costText !== undefined) {
+    try {
+      return decimalFromString(o.costText);
+    } catch {
+      // 非规范十进制文本：按解析后的数值恢复十进制值。
+    }
+  }
+  return decimalFromNumber(o.cost);
 }
 
 /** 按 (块录入序号, 位置录入序号) 沿挂装次序逐位比较，保证稳定决胜。 */
@@ -106,7 +125,7 @@ export function adjudicate(scenario: Scenario): AdjudicationOutcome {
         railName: rail.name,
         coordinate: rail.coordinate,
         cost: o.cost,
-        costDecimal: decimalFromNumber(o.cost),
+        costDecimal: optionCostDecimal(o),
       };
     }),
   }));

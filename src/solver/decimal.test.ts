@@ -4,11 +4,13 @@ import {
   decimalAdd,
   decimalCompare,
   decimalFromNumber,
+  decimalFromString,
   decimalToNumber,
   decimalToString,
 } from './decimal';
 
 const d = decimalFromNumber;
+const s = decimalFromString;
 
 describe('decimal · 精确十进制表示', () => {
   it('由录入值恢复十进制：0.1、1e-10、整数与科学计数法', () => {
@@ -59,5 +61,49 @@ describe('decimal · 精确十进制表示', () => {
     expect(decimalToNumber(decimalAdd(d(0.1), d(0.2)))).toBe(0.3);
     expect(decimalToNumber(d(0))).toBe(0);
     expect(decimalToString(decimalAdd(d(0.1), d(0.2)))).toBe('0.3');
+  });
+});
+
+describe('decimal · 录入原文的精确解析（decimalFromString）', () => {
+  it('保留 Number() 会舍去的末尾有效位：0.10000000000000001 严格大于 0.1', () => {
+    // 两者是同一双精度，经 number 往返必然丢失差额，必须按录入文本解析
+    expect(Number('0.10000000000000001')).toBe(0.1);
+    const dearer = s('0.10000000000000001');
+    expect(decimalToString(dearer)).toBe('0.10000000000000001');
+    expect(decimalCompare(dearer, s('0.1'))).toBe(1);
+    expect(decimalCompare(s('0.1'), dearer)).toBe(-1);
+    // 与数值恢复的结果严格区分：decimalFromNumber(0.1) 只是 0.1
+    expect(decimalCompare(dearer, d(0.1))).toBe(1);
+    // 差额是真实的 1e-17 级十进制差：总和也严格有序
+    const sum = decimalAdd(dearer, DECIMAL_ZERO);
+    expect(decimalCompare(sum, d(0.1))).toBe(1);
+  });
+
+  it('文本不同但十进制值相等：0.1 与 0.100 判为同成本', () => {
+    expect(decimalCompare(s('0.1'), s('0.100'))).toBe(0);
+    expect(decimalCompare(s('0.10000000000000001'), s('0.10000000000000001'))).toBe(0);
+    expect(decimalCompare(s('1e-10'), s('0.0000000001'))).toBe(0);
+  });
+
+  it('支持符号、指数与首尾空白', () => {
+    expect(decimalToString(s(' 0.1 '))).toBe('0.1');
+    expect(decimalToString(s('-2.5'))).toBe('-2.5');
+    expect(decimalToString(s('1.5e-7'))).toBe('0.00000015');
+    expect(decimalToString(s('2e3'))).toBe('2000');
+    expect(decimalToString(s('007'))).toBe('7');
+  });
+
+  it('非规范十进制文本抛出错误', () => {
+    expect(() => s('')).toThrow();
+    expect(() => s('abc')).toThrow();
+    expect(() => s('0x10')).toThrow();
+    expect(() => s('1.2.3')).toThrow();
+  });
+
+  it('decimalFromNumber 委托最短往返表示，行为不变', () => {
+    expect(decimalToString(d(0.1))).toBe('0.1');
+    expect(decimalToString(d(1e-10))).toBe('0.0000000001');
+    expect(() => d(Number.NaN)).toThrow();
+    expect(() => d(Number.POSITIVE_INFINITY)).toThrow();
   });
 });

@@ -139,6 +139,83 @@ if (r4.feasible) {
   );
 }
 
+// 录入原文极细小差异场景：两条零力臂导轨、4 块单位质量配重，载荷上限 4、
+// 力矩区间 [-1,1]，所有位置均可选。b1 的 #1 录入 0.10000000000000001、
+// #2 录入 0.1——两者经 Number() 是同一双精度，但按录入的十进制值 #1 严格
+// 更贵，裁决须按录入文本比较并返回 1,0,0,0（b1 选 #2，总代价 0.1）。
+const tinyTextDiffScenario: Scenario = {
+  rails: [
+    { id: 'Z1', name: 'Z1', coordinate: 0 },
+    { id: 'Z2', name: 'Z2', coordinate: 0 },
+  ],
+  blocks: [
+    {
+      id: 'b1',
+      name: 'b1',
+      mass: 1,
+      options: [
+        { railId: 'Z1', cost: 0.1, costText: '0.10000000000000001' },
+        { railId: 'Z2', cost: 0.1, costText: '0.1' },
+      ],
+    },
+    ...[2, 3, 4].map((k) => ({
+      id: `b${k}`,
+      name: `b${k}`,
+      mass: 1,
+      options: [
+        { railId: 'Z1', cost: 0 },
+        { railId: 'Z2', cost: 0 },
+      ],
+    })),
+  ],
+  limits: { maxLoad: 4, minTorque: -1, maxTorque: 1 },
+};
+
+const r5 = adjudicate(tinyTextDiffScenario);
+check(r5.feasible, '裁决模块：录入原文极细小差异场景应判定为可行');
+if (r5.feasible) {
+  const p = r5.plan;
+  check(
+    p.steps.map((s) => s.optionIndex).join(',') === '1,0,0,0',
+    `原文差异：b1 须选代价 0.1 的位置 #2，返回 1,0,0,0（实际 ${p.steps.map((s) => s.optionIndex).join(',')}）`,
+  );
+  check(p.totalCost === 0.1, `原文差异：总代价须严格为 0.1（实际 ${p.totalCost}）`);
+  check(p.steps.length === 4 && new Set(p.steps.map((s) => s.blockIndex)).size === 4, '原文差异：每块配重恰用一次');
+  check(
+    p.steps.every((s) => s.cumulativeMass <= 4 + 1e-9 && Math.abs(s.cumulativeTorque) <= 1 + 1e-9),
+    '原文差异：每个前缀状态均满足载荷与力矩限制',
+  );
+  check(p.finalMass === 4, '原文差异：最终载荷应恰为上限 4（载荷边界）');
+  check(p.minTorqueMargin === 1, `原文差异：力矩余量应为 1（实际 ${p.minTorqueMargin}）`);
+}
+
+// 代价完全相等场景：b1 两位置录入 0.1 与 0.100，文本不同但十进制值相等，
+// 不存在成本差，须按位置录入序号稳定决胜返回 0,0,0,0。
+const equalTextCostScenario: Scenario = {
+  ...tinyTextDiffScenario,
+  blocks: tinyTextDiffScenario.blocks.map((b) =>
+    b.id === 'b1'
+      ? {
+          ...b,
+          options: [
+            { railId: 'Z1', cost: 0.1, costText: '0.1' },
+            { railId: 'Z2', cost: 0.1, costText: '0.100' },
+          ],
+        }
+      : b,
+  ),
+};
+
+const r6 = adjudicate(equalTextCostScenario);
+check(r6.feasible, '裁决模块：代价完全相等场景应判定为可行');
+if (r6.feasible) {
+  check(r6.plan.totalCost === 0.1, `完全相等：总代价应为 0.1（实际 ${r6.plan.totalCost}）`);
+  check(
+    r6.plan.steps.map((s) => s.optionIndex).join(',') === '0,0,0,0',
+    `完全相等：应按序号稳定决胜返回 0,0,0,0（实际 ${r6.plan.steps.map((s) => s.optionIndex).join(',')}）`,
+  );
+}
+
 // 不可行场景：深度 1 即止步，最深前缀为 b1@R（余量最大），剩余选择同时触发载荷与力矩限制。
 const infeasibleScenario: Scenario = {
   rails: [{ id: 'R', name: 'R', coordinate: 1 }],

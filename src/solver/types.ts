@@ -9,6 +9,13 @@ export interface RailPosition {
 export interface BlockOptionInput {
   railId: string;
   cost: number;
+  /**
+   * 安装代价的录入原文（可选）。提供时总代价按该文本的十进制值精确累计，
+   * 保留 Number() 会舍去的末尾有效位（"0.10000000000000001" 与 "0.1" 是
+   * 同一双精度，但录入的十进制值不同，必须严格区分）；缺省时由 cost 的
+   * 最短往返表示恢复。
+   */
+  costText?: string;
 }
 
 /** 一块幕布配重。 */

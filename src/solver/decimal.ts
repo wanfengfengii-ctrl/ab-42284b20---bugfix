@@ -14,23 +14,34 @@ export interface Decimal {
 
 export const DECIMAL_ZERO: Decimal = { coefficient: 0n, exponent: 0 };
 
-/** number 的最短往返十进制文本（String(x) 的输出格式）。 */
+/** 规范十进制文本（String(x) 的输出格式是其子集）。 */
 const DECIMAL_TEXT = /^(-?)(\d+)(?:\.(\d+))?(?:e([+-]?\d+))?$/;
 
 /**
- * 以 number 的最短往返表示恢复其十进制值。录入文本经 Number() 解析后，
- * String() 会给出能往返同一双精度的最短十进制串，即录入的十进制值本身
- * （如 0.1 → "0.1"，1e-10 → "1e-10"）。
+ * 直接按录入文本解析精确十进制值。Number() 会把超出双精度精度的末尾有效位
+ * 舍入掉——"0.10000000000000001" 与 "0.1" 是同一双精度——而代价比较必须
+ * 严格按录入的十进制值进行，因此录入原文须走此入口，不得先经 number 往返。
+ * 仅接受规范十进制文本（可带符号、小数部分与指数）；其他文本抛出错误。
  */
-export function decimalFromNumber(x: number): Decimal {
-  if (!Number.isFinite(x)) throw new Error(`十进制代价须为有限数值: ${x}`);
-  const m = DECIMAL_TEXT.exec(String(x));
-  if (!m) throw new Error(`无法解析的十进制数值: ${String(x)}`);
+export function decimalFromString(text: string): Decimal {
+  const m = DECIMAL_TEXT.exec(text.trim());
+  if (!m) throw new Error(`无法解析的十进制数值: ${text}`);
   const [, sign, intPart, fracPart = '', expPart] = m;
   let coefficient = BigInt(intPart + fracPart);
   if (sign === '-') coefficient = -coefficient;
   const exponent = (expPart === undefined ? 0 : Number(expPart)) - fracPart.length;
   return normalize({ coefficient, exponent });
+}
+
+/**
+ * 以 number 的最短往返表示恢复其十进制值。录入文本经 Number() 解析后，
+ * String() 会给出能往返同一双精度的最短十进制串，即录入的十进制值本身
+ * （如 0.1 → "0.1"，1e-10 → "1e-10"）。注意：仅当录入文本能往返同一
+ * 双精度时这才等价于录入值；末尾有效位被舍去的录入须用 decimalFromString。
+ */
+export function decimalFromNumber(x: number): Decimal {
+  if (!Number.isFinite(x)) throw new Error(`十进制代价须为有限数值: ${x}`);
+  return decimalFromString(String(x));
 }
 
 /** 去掉系数末尾的 0（并把零规范化为 0 × 10^0），保持表示紧凑。 */
